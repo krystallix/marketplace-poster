@@ -10,6 +10,7 @@ import (
 	"time"
 	"math/rand"
 
+	"github.com/joho/godotenv"
 	cron "github.com/robfig/cron/v3"
 	"marketplace/apis"
 )
@@ -26,6 +27,7 @@ type Product struct {
 }
 
 func loadEnv() string {
+	_ = godotenv.Load()
 	return os.Getenv("OPENAI_API_KEY")
 }
 
