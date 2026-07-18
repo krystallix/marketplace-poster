@@ -3,6 +3,7 @@ package apis
 import (
 	"context"
 	"errors"
+
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -28,11 +29,11 @@ func NewOpenAI(apiKey string) *OpenAI {
 // ParaphraseDescription text using OpenAI
 func (o *OpenAI) ParaphraseDescription(text string) (string, error) {
 	resp, err := o.client.CreateChatCompletion(context.TODO(), openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
+		Model: "combo-1",
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a local Javanese/Indonesian marketing copywriter for Facebook Marketplace. Rewrite the given text to make it unique and engaging in casual Indonesian and Javanese slang. Ensure important details (Free delivery/install, trade-in options, location Bantul/Yogyakarta, prices 400k-600k, WA 081354007400) are preserved. Format nicely with emojis.",
+				Content: "You are a Indonesian marketing copywriter for Facebook Marketplace. Rewrite the given text to make it unique and engaging in casual Indonesian slang. Ensure important details (Free delivery/install, trade-in options, location Bantul/Yogyakarta, prices 400k-600k, WA 081354007400) are preserved. Format without emoji and styling like ** for bold cause facebook cant read it.",
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
@@ -49,7 +50,7 @@ func (o *OpenAI) ParaphraseDescription(text string) (string, error) {
 // GenerateTitle generates a unique battery sale title using OpenAI
 func (o *OpenAI) GenerateTitle() (string, error) {
 	resp, err := o.client.CreateChatCompletion(context.TODO(), openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
+		Model: "combo-1",
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -57,6 +58,48 @@ func encodeToBase64(filePath string) string {
 	return base64.StdEncoding.EncodeToString(data)
 }
 
+func runPosting(aiClient *apis.OpenAI, baseDescription string, tags []string) {
+	title, err := aiClient.GenerateTitle()
+	if err != nil {
+		log.Printf("Failed to generate title: %v", err)
+		title = "Aki Mobil Baru Bergaransi antar pasang gratis"
+	}
+
+	desc, err := aiClient.ParaphraseDescription(baseDescription)
+	if err != nil {
+		log.Printf("Failed to paraphrase description: %v", err)
+		desc = baseDescription
+	}
+
+	img := randomImagePicker()
+	var imgs []string
+	if img != "" {
+		imgs = append(imgs, encodeToBase64(img))
+	}
+
+	product := Product{
+		Title:       title,
+		Price:       "525",
+		Category:    "Auto Parts",
+		Condition:   "new",
+		Description: desc,
+		Tags:        tags,
+		Images:      imgs,
+	}
+
+	jsonData, err := json.MarshalIndent(product, "", "    ")
+	if err == nil {
+		fmt.Println(string(jsonData))
+	}
+	sched, err := cron.ParseStandard("0 7,12,17 * * *")
+	if err == nil {
+		nextRun := sched.Next(time.Now())
+		log.Printf("Next posting at %s\n", nextRun.Format("15:04"))
+	} else {
+		log.Println("Next posting in 12 hours")
+	}
+}
+
 func main() {
 	apiKey := loadEnv()
 	if apiKey == "" {
@@ -98,41 +141,28 @@ hub wa 081354007400`
 			timeToWait := randomJitter(d - time.Now().Sub(time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Now().Location())))
 			time.Sleep(timeToWait)
 
-			title, err := aiClient.GenerateTitle()
-			if err != nil {
-				log.Printf("Failed to generate title: %v", err)
-				title = "Aki Mobil Baru Bergaransi antar pasang gratis"
-			}
-
-			desc, err := aiClient.ParaphraseDescription(baseDescription)
-			if err != nil {
-				log.Printf("Failed to paraphrase description: %v", err)
-				desc = baseDescription
-			}
-
-			img := randomImagePicker()
-			var imgs []string
-			if img != "" {
-				imgs = append(imgs, encodeToBase64(img))
-			}
-
-			product := Product{
-				Title:       title,
-				Price:       "525",
-				Category:    "Auto Parts",
-				Condition:   "new",
-				Description: desc,
-				Tags:        tags,
-				Images:      imgs,
-			}
-
-			jsonData, err := json.MarshalIndent(product, "", "    ")
-			if err == nil {
-				fmt.Println(string(jsonData))
-			}
+			runPosting(aiClient, baseDescription, tags)
 		}
 	})
 
 	c.Start()
+
+	sched, err := cron.ParseStandard("0 7,12,17 * * *")
+	if err == nil {
+		nextRun := sched.Next(time.Now())
+		log.Printf("Next posting at %s\n", nextRun.Format("15:04"))
+	}
+
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			text := scanner.Text()
+			if text == "r" {
+				log.Println("Running posting immediately...")
+				runPosting(aiClient, baseDescription, tags)
+			}
+		}
+	}()
+
 	select {} // block forever
 }
