@@ -19,7 +19,9 @@ type OpenAI struct {
 
 // NewOpenAI creates a new OpenAIClient
 func NewOpenAI(apiKey string) *OpenAI {
-	client := openai.NewClientWithBaseURL(apiKey, "https://gateway.arkane.my.id/v1")
+	config := openai.DefaultConfig(apiKey)
+	config.BaseURL = "https://gateway.arkane.my.id/v1"
+	client := openai.NewClientWithConfig(config)
 	return &OpenAI{client: client}
 }
 
