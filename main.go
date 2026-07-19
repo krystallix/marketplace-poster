@@ -2,14 +2,15 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
-	"math/rand"
 
 	"github.com/joho/godotenv"
 	cron "github.com/robfig/cron/v3"
@@ -27,6 +28,16 @@ type Product struct {
 	Images      []string `json:"images"`
 }
 
+func cliLog(scope, color, format string, args ...any) {
+	log.Printf("\033[%sm[%s]\033[0m %s", color, scope, fmt.Sprintf(format, args...))
+}
+
+func showCommands() {
+	fmt.Println("\033[36mType command and press Enter:\033[0m")
+	fmt.Println("  \033[32mR\033[0m - Run Post Immediately")
+	fmt.Println("  \033[33mT\033[0m - Dry Run Test")
+}
+
 func loadEnv() string {
 	_ = godotenv.Load()
 	return os.Getenv("OPENAI_API_KEY")
@@ -39,47 +50,50 @@ func randomJitter(duration time.Duration) time.Duration {
 	return duration + jitter
 }
 
-func randomImagePicker() string {
+func imagePicker() []string {
 	files, err := filepath.Glob("images/*")
 	if err != nil || len(files) == 0 {
-		return ""
+		return nil
 	}
-	return files[rand.Intn(len(files))]
+	images := make([]string, 0, len(files))
+	for _, file := range files {
+		ext := strings.ToLower(filepath.Ext(file))
+		switch ext {
+		case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif":
+			images = append(images, file)
+		}
+	}
+	rand.Shuffle(len(images), func(i, j int) {
+		images[i], images[j] = images[j], images[i]
+	})
+	return images
 }
 
-func encodeToBase64(filePath string) string {
-	if filePath == "" {
-		return ""
-	}
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return ""
-	}
-	return base64.StdEncoding.EncodeToString(data)
+func randomPrice() string {
+	return fmt.Sprint(rand.Intn(201) + 400)
 }
 
-func runPosting(aiClient *apis.OpenAI, baseDescription string, tags []string) {
+func runPosting(aiClient *apis.OpenAI, fbPoster *apis.FacebookPoster, baseDescription string, tags []string) {
+	cliLog("AI", "35", "Generating title...")
 	title, err := aiClient.GenerateTitle()
 	if err != nil {
-		log.Printf("Failed to generate title: %v", err)
+		cliLog("AI", "31", "Failed to generate title: %v", err)
 		title = "Aki Mobil Baru Bergaransi antar pasang gratis"
 	}
 
+	cliLog("AI", "35", "Paraphrasing description...")
 	desc, err := aiClient.ParaphraseDescription(baseDescription)
 	if err != nil {
-		log.Printf("Failed to paraphrase description: %v", err)
+		cliLog("AI", "31", "Failed to paraphrase description: %v", err)
 		desc = baseDescription
 	}
 
-	img := randomImagePicker()
-	var imgs []string
-	if img != "" {
-		imgs = append(imgs, encodeToBase64(img))
-	}
+	imgs := imagePicker()
+	cliLog("MEDIA", "36", "Selected %d image(s)", len(imgs))
 
 	product := Product{
 		Title:       title,
-		Price:       "525",
+		Price:       randomPrice(),
 		Category:    "Auto Parts",
 		Condition:   "new",
 		Description: desc,
@@ -91,22 +105,43 @@ func runPosting(aiClient *apis.OpenAI, baseDescription string, tags []string) {
 	if err == nil {
 		fmt.Println(string(jsonData))
 	}
+
+	if fbPoster != nil {
+		err = fbPoster.Post(product.Title, product.Price, product.Category, product.Condition, product.Description, product.Tags, product.Images)
+		if err != nil {
+			cliLog("POST", "31", "Failed to post to Facebook: %v", err)
+		}
+	}
+
 	sched, err := cron.ParseStandard("0 7,12,17 * * *")
 	if err == nil {
 		nextRun := sched.Next(time.Now())
-		log.Printf("Next posting at %s\n", nextRun.Format("15:04"))
+		cliLog("SCHEDULE", "36", "Next posting at %s", nextRun.Format("15:04"))
 	} else {
-		log.Println("Next posting in 12 hours")
+		cliLog("SCHEDULE", "36", "Next posting in 12 hours")
 	}
 }
 
 func main() {
+	log.SetOutput(io.MultiWriter(os.Stderr, frontendLogs))
 	apiKey := loadEnv()
 	if apiKey == "" {
 		log.Fatal("OPENAI_API_KEY not set")
 	}
 
 	aiClient := apis.NewOpenAI(apiKey)
+
+	fbPoster := apis.NewFacebookPoster(
+		os.Getenv("FB_C_USER"),
+		os.Getenv("FB_DATR"),
+		os.Getenv("FB_FR"),
+		os.Getenv("FB_PRESENCE"),
+		os.Getenv("FB_SB"),
+		os.Getenv("FB_WD"),
+		os.Getenv("FB_XS"),
+		os.Getenv("HEADLESS") != "false",
+	)
+
 	baseDescription := `monggo yang mau cari aki untuk mobil, motor, maupun sepeda listrik
 
 tersedia beberapa merk, jenis 
@@ -134,6 +169,13 @@ hub wa 081354007400`
 		"akimobiljogja",
 	}
 
+	if os.Getenv("RUN_ONCE") == "true" {
+		runPosting(aiClient, fbPoster, baseDescription, tags)
+		return
+	}
+
+	startUI(aiClient, fbPoster, baseDescription, tags)
+
 	c := cron.New()
 	c.AddFunc("0 7,12,17 * * *", func() {
 		durations := []time.Duration{7 * time.Hour, 12 * time.Hour, 17 * time.Hour}
@@ -141,7 +183,7 @@ hub wa 081354007400`
 			timeToWait := randomJitter(d - time.Now().Sub(time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Now().Location())))
 			time.Sleep(timeToWait)
 
-			runPosting(aiClient, baseDescription, tags)
+			runPosting(aiClient, fbPoster, baseDescription, tags)
 		}
 	})
 
@@ -150,16 +192,31 @@ hub wa 081354007400`
 	sched, err := cron.ParseStandard("0 7,12,17 * * *")
 	if err == nil {
 		nextRun := sched.Next(time.Now())
-		log.Printf("Next posting at %s\n", nextRun.Format("15:04"))
+		cliLog("SCHEDULE", "36", "Next posting at %s", nextRun.Format("15:04"))
 	}
 
+	showCommands()
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
-			text := scanner.Text()
-			if text == "r" {
-				log.Println("Running posting immediately...")
-				runPosting(aiClient, baseDescription, tags)
+			switch strings.ToUpper(strings.TrimSpace(scanner.Text())) {
+			case "R":
+				cliLog("COMMAND", "32", "Running post immediately...")
+				runPosting(aiClient, fbPoster, baseDescription, tags)
+				showCommands()
+			case "T":
+				cliLog("COMMAND", "33", "Running dry-run test...")
+				oldDryRun := os.Getenv("DRY_RUN")
+				_ = os.Setenv("DRY_RUN", "true")
+				runPosting(aiClient, fbPoster, baseDescription, tags)
+				if oldDryRun == "" {
+					_ = os.Unsetenv("DRY_RUN")
+				} else {
+					_ = os.Setenv("DRY_RUN", oldDryRun)
+				}
+				showCommands()
+			default:
+				showCommands()
 			}
 		}
 	}()
