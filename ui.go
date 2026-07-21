@@ -77,7 +77,7 @@ func startUI(aiClient *apis.OpenAI, fbPoster *apis.FacebookPoster, baseDescripti
 			"Wd":            os.Getenv("FB_WD"),
 			"Xs":            os.Getenv("FB_XS"),
 			"PriceRange":    "400-600",
-			"Schedule":      "07:00, 12:00, 17:00",
+			"Schedule":      "Selasa, Kamis, Sabtu, Minggu · 07:00, 12:00, 17:00",
 			"Now":           time.Now().Format("15:04:05"),
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

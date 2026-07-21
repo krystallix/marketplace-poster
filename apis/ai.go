@@ -3,6 +3,9 @@ package apis
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math/rand"
+	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -49,16 +52,30 @@ func (o *OpenAI) ParaphraseDescription(text string) (string, error) {
 
 // GenerateTitle generates a unique battery sale title using OpenAI
 func (o *OpenAI) GenerateTitle() (string, error) {
+	angles := []string{
+		"aki soak bisa tukar tambah",
+		"antar pasang gratis area Jogja Bantul",
+		"aki baru bergaransi resmi",
+		"konsultasi aki mobil motor",
+		"harga aki mulai 400 ribuan",
+		"aki mobil motor sepeda listrik",
+		"stok banyak merk dan tipe",
+	}
+	tone := []string{"natural", "urgent", "ramah", "singkat", "lokal Jogja", "anti kaku"}
+	seed := time.Now().UnixNano()
+	angle := angles[rand.Intn(len(angles))]
+	style := tone[rand.Intn(len(tone))]
 	resp, err := o.client.CreateChatCompletion(context.TODO(), openai.ChatCompletionRequest{
-		Model: "combo-1",
+		Model:       "combo-1",
+		Temperature: 1.15,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
-				Content: "Generate a short, catchy, unique title in Indonesian for a Facebook Marketplace listing selling vehicle batteries (aki mobil/motor). Keep it under 100 characters. Example: 'Aki Mobil Baru Bergaransi antar pasang gratis'. Do not use quotes in the output.",
+				Content: "Buat 1 judul Facebook Marketplace bahasa Indonesia untuk jual aki kendaraan. Maksimal 80 karakter. Jangan pakai tanda kutip. Jangan pakai template umum seperti 'Aki Mobil Baru Bergaransi antar pasang gratis'. Jangan selalu mulai dengan 'Aki Mobil'. Variasikan kata pembuka, susunan, dan fokus manfaat. Output hanya judul.",
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
-				Content: "Generate one title.",
+				Content: fmt.Sprintf("Fokus: %s. Tone: %s. Seed unik: %d.", angle, style, seed),
 			},
 		},
 	})

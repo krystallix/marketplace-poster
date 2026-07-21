@@ -18,6 +18,8 @@ import (
 )
 
 // Product defines product data structure
+const postingSchedule = "0 7,12,17 * * SUN,TUE,THU,SAT"
+
 type Product struct {
 	Title       string   `json:"title"`
 	Price       string   `json:"price"`
@@ -66,7 +68,14 @@ func imagePicker() []string {
 	rand.Shuffle(len(images), func(i, j int) {
 		images[i], images[j] = images[j], images[i]
 	})
-	return images
+	if len(images) <= 2 {
+		return images
+	}
+	limit := rand.Intn(2) + 2
+	if len(images) < limit {
+		limit = len(images)
+	}
+	return images[:limit]
 }
 
 func randomPrice() string {
@@ -113,7 +122,7 @@ func runPosting(aiClient *apis.OpenAI, fbPoster *apis.FacebookPoster, baseDescri
 		}
 	}
 
-	sched, err := cron.ParseStandard("0 7,12,17 * * *")
+	sched, err := cron.ParseStandard(postingSchedule)
 	if err == nil {
 		nextRun := sched.Next(time.Now())
 		cliLog("SCHEDULE", "36", "Next posting at %s", nextRun.Format("15:04"))
@@ -177,19 +186,16 @@ hub wa 081354007400`
 	startUI(aiClient, fbPoster, baseDescription, tags)
 
 	c := cron.New()
-	c.AddFunc("0 7,12,17 * * *", func() {
-		durations := []time.Duration{7 * time.Hour, 12 * time.Hour, 17 * time.Hour}
-		for _, d := range durations {
-			timeToWait := randomJitter(d - time.Now().Sub(time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Now().Location())))
-			time.Sleep(timeToWait)
-
-			runPosting(aiClient, fbPoster, baseDescription, tags)
-		}
+	c.AddFunc(postingSchedule, func() {
+		delay := time.Duration(rand.Intn(16)) * time.Minute
+		cliLog("SCHEDULE", "36", "Scheduled run triggered, waiting jitter %s", delay)
+		time.Sleep(delay)
+		runPosting(aiClient, fbPoster, baseDescription, tags)
 	})
 
 	c.Start()
 
-	sched, err := cron.ParseStandard("0 7,12,17 * * *")
+	sched, err := cron.ParseStandard(postingSchedule)
 	if err == nil {
 		nextRun := sched.Next(time.Now())
 		cliLog("SCHEDULE", "36", "Next posting at %s", nextRun.Format("15:04"))
