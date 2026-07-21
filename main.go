@@ -68,10 +68,10 @@ func imagePicker() []string {
 	rand.Shuffle(len(images), func(i, j int) {
 		images[i], images[j] = images[j], images[i]
 	})
-	if len(images) <= 2 {
+	if len(images) <= 3 {
 		return images
 	}
-	limit := rand.Intn(2) + 2
+	limit := rand.Intn(3) + 3
 	if len(images) < limit {
 		limit = len(images)
 	}
